@@ -31,6 +31,6 @@ jobs:
       - name: Set up go
         uses: actions/setup-go@v5
       - name: Lint
-        uses: golangci/golanci-lint-action@v3
+        uses: golangci/golangci-lint-action@v3
         with:
           args: --timeout=5m
