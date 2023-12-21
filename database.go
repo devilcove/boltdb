@@ -8,12 +8,14 @@ import (
 	"go.etcd.io/bbolt"
 )
 
+// Generic error results
 var (
-	ErrNoResults        = errors.New("no results found")
-	ErrInvalidTableName = errors.New("invalid table")
+	ErrNoResults        = errors.New("no results found") // ErrNoResults indicates query found no results
+	ErrInvalidTableName = errors.New("invalid table")    // ErrInvalidTableName indicates that specified table does not exist
 	db                  *bbolt.DB
 )
 
+// Initialize sets up bbolt db using file path and creates tables if required
 func Initialize(file string, tables []string) error {
 	var err error
 	db, err = bbolt.Open(file, 0666, &bbolt.Options{Timeout: 1 * time.Second})
@@ -23,6 +25,7 @@ func Initialize(file string, tables []string) error {
 	return createTables(tables)
 }
 
+// Close closes the database
 func Close() error {
 	return db.Close()
 }
@@ -49,6 +52,7 @@ func createTable(name string) error {
 	return nil
 }
 
+// Save saves a value under key in the specified table
 func Save(value any, key, table string) error {
 	marshalled, err := json.Marshal(&value)
 	if err != nil {
@@ -63,6 +67,7 @@ func Save(value any, key, table string) error {
 	})
 }
 
+// Get retrieves a value for key in specified table
 func Get[T any](value T, key, table string) (T, error) {
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
@@ -81,6 +86,7 @@ func Get[T any](value T, key, table string) (T, error) {
 	return value, err
 }
 
+// GetAll retrieves all values from table
 func GetAll[T any](value T, table string) ([]T, error) {
 	var values []T
 	err := db.View(func(tx *bbolt.Tx) error {
@@ -100,6 +106,7 @@ func GetAll[T any](value T, table string) ([]T, error) {
 	return values, err
 }
 
+// Delete deletes the entry in table corresponding to key
 func Delete[T any](value T, key, table string) error {
 	if _, err := Get(value, key, table); err != nil {
 		return err
