@@ -22,6 +22,15 @@ jobs:
         run: |
           go vet ./...
           go test -v ./...
+      - name: Update coverage report
+        uses: ncruses/go-coverage-report@v0
+        with:
+          report: true
+          chart: true
+          ammend: true
+        if: |
+          github.event_name=='push' || github.event_name=='workflow_dispatch'
+        continue-on-error: true
 
   lint:
     runs-on: ubuntu-latest
