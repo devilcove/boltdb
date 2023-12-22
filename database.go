@@ -12,6 +12,7 @@ import (
 var (
 	ErrNoResults        = errors.New("no results found") // ErrNoResults indicates query found no results
 	ErrInvalidTableName = errors.New("invalid table")    // ErrInvalidTableName indicates that specified table does not exist
+	ErrNoConnection     = errors.New("no db connection") //
 	db                  *bbolt.DB
 )
 
@@ -28,6 +29,11 @@ func Initialize(file string, tables []string) error {
 // Close closes the database
 func Close() error {
 	return db.Close()
+}
+
+// Connection returns the connection to the store for more advanced queries by caller
+func Connection() *bbolt.DB {
+	return db
 }
 
 func createTables(tables []string) error {
