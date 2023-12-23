@@ -74,7 +74,8 @@ func Save(value any, key, table string) error {
 }
 
 // Get retrieves a value for key in specified table
-func Get[T any](value T, key, table string) (T, error) {
+func Get[T any](key, table string) (T, error) {
+	var value T
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
 		if b == nil {
@@ -93,7 +94,8 @@ func Get[T any](value T, key, table string) (T, error) {
 }
 
 // GetAll retrieves all values from table
-func GetAll[T any](value T, table string) ([]T, error) {
+func GetAll[T any](table string) ([]T, error) {
+	var value T
 	var values []T
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
@@ -113,8 +115,8 @@ func GetAll[T any](value T, table string) ([]T, error) {
 }
 
 // Delete deletes the entry in table corresponding to key
-func Delete[T any](value T, key, table string) error {
-	if _, err := Get(value, key, table); err != nil {
+func Delete[T any](key, table string) error {
+	if _, err := Get[T](key, table); err != nil {
 		return err
 	}
 	err := db.Update(func(tx *bbolt.Tx) error {
