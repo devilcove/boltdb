@@ -95,7 +95,6 @@ func Get[T any](key, table string) (T, error) {
 
 // GetAll retrieves all values from table
 func GetAll[T any](table string) ([]T, error) {
-	var value T
 	var values []T
 	err := db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
@@ -103,6 +102,7 @@ func GetAll[T any](table string) ([]T, error) {
 			return ErrInvalidTableName
 		}
 		_ = b.ForEach(func(k, v []byte) error {
+			var value T
 			if err := json.Unmarshal(v, &value); err != nil {
 				return err
 			}
