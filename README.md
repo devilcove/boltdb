@@ -27,6 +27,9 @@ defer boltd.Close()
 ````
 ### Create/Update
 pass the key/value pair along with table name
+#### Save -- save key/value always (overwrite existing or create new)
+#### Insert -- save only iff key does not exist
+#### Update -- save only iff key exists
 ````
 cont userTable = "users"
 
@@ -44,14 +47,14 @@ if err := boltdb.Save(user, user.Username, userTable); err != nil {
 ### Read
 return value of key in table
 ````
-user, err := boltdb.Read(models.User{}, "admin", userTable)
+user, err := boltdb.Get(models.User{}, "admin", userTable)
 if err != nil {
   return err
 }
 ````
 retrieve all values from table
 ````
-users, err := boltdb.ReadAll(models.User{}, userTable)
+users, err := boltdb.GetAll(models.User{}, userTable)
 if err != nil {
   return err
 }
@@ -101,6 +104,5 @@ func AdminExists() bool {
 	}
 	return found
 }
-  return found
-}
+
 ````  
