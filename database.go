@@ -13,6 +13,7 @@ var (
 	ErrNoResults        = errors.New("no results found") // ErrNoResults indicates query found no results
 	ErrInvalidTableName = errors.New("invalid table")    // ErrInvalidTableName indicates that specified table does not exist
 	ErrNoConnection     = errors.New("no db connection") //
+	ErrExists           = errors.New("key existss")
 	db                  *bbolt.DB
 )
 
@@ -71,6 +72,27 @@ func Save(value any, key, table string) error {
 		}
 		return b.Put([]byte(key), marshalled)
 	})
+}
+
+// Insert saves a value only if key does not exist
+func Insert(value any, key, table string) error {
+	_, err := Get[any](key, table)
+	if err == nil {
+		return ErrExists
+	}
+	if errors.Is(err, ErrNoResults) {
+		return Save(value, key, table)
+	}
+	return err
+}
+
+// Update save a value only if key already exists
+func Update(value any, key, table string) error {
+	_, err := Get[any](key, table)
+	if errors.Is(err, ErrExists) {
+		return Save(value, key, table)
+	}
+	return err
 }
 
 // Get retrieves a value for key in specified table

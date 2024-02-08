@@ -1,6 +1,7 @@
 package boltdb
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,9 +65,61 @@ func TestSave(t *testing.T) {
 		assert.NotNil(t, err)
 	})
 	t.Run("valid", func(t *testing.T) {
-		err := Save("testing", "name", "users")
+		user := User{
+			User: "testing",
+		}
+		err := Save(user, user.User, "users")
 		assert.Nil(t, err)
 	})
+	deleteTestEntries(t)
+	err = Close()
+	assert.Nil(t, err)
+}
+
+func TestInsert(t *testing.T) {
+	err := Initialize("./test.db", tables)
+	assert.Nil(t, err)
+	deleteTestEntries(t)
+	t.Run("valid", func(t *testing.T) {
+		user := User{
+			User: "testing",
+		}
+		err := Insert(user, user.User, "users")
+		assert.Nil(t, err)
+	})
+	t.Run("exists", func(t *testing.T) {
+		user := User{
+			User: "testing",
+		}
+		err := Insert(user, user.User, "users")
+		assert.True(t, errors.Is(err, ErrExists))
+	})
+	deleteTestEntries(t)
+	err = Close()
+	assert.Nil(t, err)
+}
+
+func TestUpdate(t *testing.T) {
+	err := Initialize("./test.db", tables)
+	assert.Nil(t, err)
+	deleteTestEntries(t)
+	t.Run("does not exist", func(t *testing.T) {
+		user := User{
+			User: "testing",
+		}
+		err := Update(user, user.User, "users")
+		assert.True(t, errors.Is(err, ErrNoResults))
+	})
+	t.Run("existing", func(t *testing.T) {
+		user := User{
+			User: "testing",
+		}
+		err := Save(user, user.User, "users")
+		assert.Nil(t, err)
+		err = Update(user, user.User, "users")
+		assert.Nil(t, err)
+	})
+	deleteTestEntries(t)
 	err = Close()
 	assert.Nil(t, err)
 }
