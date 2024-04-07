@@ -3,7 +3,7 @@ boltdb
 ![tests](https://github.com/devilcove/boltdb/actions/workflows/test.yml/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/devilcove/boltdb?style=flat-square)](https://goreportcard.com/report/github.com/devilcove/boltdb)
 [![Go Reference](https://pkg.go.dev/badge/github.com/devilcove/boltdb.svg)](https://pkg.go.dev/github.com/devilcove/boltdb)
-[![Go Coverage](https://raw.githubusercontent.com/wiki/devilcove/boltdb/coverage/coverage.svg)](https://raw.github.com/wiki/devilcove/boltdb/coverage.html)
+[![Go Coverage](https://github.com/wiki/devilcove/boltdb/coverage/coverage.svg)](https://raw.github.com/wiki/devilcove/boltdb/coverage/coverage.html)
 
 Go module `github.com/devilcove/boltdb` is a generic abstractions layer for basic crud operations on a `go.etcd.io/bbolt` key/value store
 
