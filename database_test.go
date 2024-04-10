@@ -23,7 +23,6 @@ type Other struct {
 
 func TestInitialize(t *testing.T) {
 	t.Log(tables)
-	//tables := []string{"users", "keys", "networks"}
 	t.Run("valid", func(t *testing.T) {
 		err := testInit()
 		assert.Nil(t, err)
@@ -266,7 +265,7 @@ func deleteTestEntries() error {
 
 func testInit() error {
 	if err := os.Remove("./test.db"); err != nil {
-		if err != os.ErrNotExist {
+		if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
