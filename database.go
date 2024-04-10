@@ -89,10 +89,10 @@ func Insert(value any, key, table string) error {
 // Update save a value only if key already exists
 func Update(value any, key, table string) error {
 	_, err := Get[any](key, table)
-	if errors.Is(err, ErrExists) {
+	if err == nil {
 		return Save(value, key, table)
 	}
-	return err
+	return ErrExists
 }
 
 // Get retrieves a value for key in specified table
@@ -138,6 +138,7 @@ func GetAll[T any](table string) ([]T, error) {
 
 // Delete deletes the entry in table corresponding to key
 func Delete[T any](key, table string) error {
+	//verify table exists
 	if _, err := Get[T](key, table); err != nil {
 		return err
 	}

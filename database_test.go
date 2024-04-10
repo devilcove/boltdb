@@ -2,6 +2,8 @@ package boltdb
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,20 +12,19 @@ import (
 var tables = []string{"users", "keys", "tables"}
 
 type User struct {
-	User string
+	Name string
 	Pass string
 }
 
 type Other struct {
-	Name string
-	Foo  int
+	Bar string
+	Foo int
 }
 
 func TestInitialize(t *testing.T) {
 	t.Log(tables)
-	//tables := []string{"users", "keys", "networks"}
 	t.Run("valid", func(t *testing.T) {
-		err := Initialize("./test.db", tables)
+		err := testInit()
 		assert.Nil(t, err)
 		err = Close()
 		assert.Nil(t, err)
@@ -35,7 +36,7 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	err := Initialize("./test.db", tables)
+	err := testInit()
 	assert.Nil(t, err)
 	t.Run("open", func(t *testing.T) {
 		err = Close()
@@ -48,7 +49,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestSave(t *testing.T) {
-	err := Initialize("./test.db", tables)
+	err := testInit()
 	assert.Nil(t, err)
 	t.Run("noSuchTable", func(t *testing.T) {
 		err := Save("testing", "key", "nosuchtable")
@@ -66,68 +67,49 @@ func TestSave(t *testing.T) {
 	})
 	t.Run("valid", func(t *testing.T) {
 		user := User{
-			User: "testing",
+			Name: "testing",
 		}
-		err := Save(user, user.User, "users")
+		err := Save(user, user.Name, "users")
 		assert.Nil(t, err)
 	})
-	deleteTestEntries(t)
+	err = deleteTestEntries()
+	assert.Nil(t, err)
 	err = Close()
 	assert.Nil(t, err)
 }
 
 func TestInsert(t *testing.T) {
-	err := Initialize("./test.db", tables)
+	err := testInit()
 	assert.Nil(t, err)
-	deleteTestEntries(t)
+	err = deleteTestEntries()
+	assert.Nil(t, err)
+
 	t.Run("valid", func(t *testing.T) {
 		user := User{
-			User: "testing",
+			Name: "testing",
 		}
-		err := Insert(user, user.User, "users")
+		err := Insert(user, user.Name, "users")
 		assert.Nil(t, err)
 	})
 	t.Run("exists", func(t *testing.T) {
 		user := User{
-			User: "testing",
+			Name: "testing",
 		}
-		err := Insert(user, user.User, "users")
+		err := Insert(user, user.Name, "users")
 		assert.True(t, errors.Is(err, ErrExists))
 	})
-	deleteTestEntries(t)
-	err = Close()
-	assert.Nil(t, err)
-}
-
-func TestUpdate(t *testing.T) {
-	err := Initialize("./test.db", tables)
-	assert.Nil(t, err)
-	deleteTestEntries(t)
-	t.Run("does not exist", func(t *testing.T) {
-		user := User{
-			User: "testing",
-		}
-		err := Update(user, user.User, "users")
-		assert.True(t, errors.Is(err, ErrNoResults))
-	})
-	t.Run("existing", func(t *testing.T) {
-		user := User{
-			User: "testing",
-		}
-		err := Save(user, user.User, "users")
-		assert.Nil(t, err)
-		err = Update(user, user.User, "users")
-		assert.Nil(t, err)
-	})
-	deleteTestEntries(t)
+	//deleteTestEntries(t)
 	err = Close()
 	assert.Nil(t, err)
 }
 
 func TestGetOne(t *testing.T) {
-	err := Initialize("./test.db", tables)
+	//err := Initialize("./test.db", tables)
+	err := testInit()
 	assert.Nil(t, err)
-	deleteTestEntries(t)
+	err = deleteTestEntries()
+	assert.Nil(t, err)
+	t.Log(err)
 	t.Run("noSuchTable", func(t *testing.T) {
 		value, err := Get[User]("first", "nosuchtable")
 		assert.Equal(t, User{}, value)
@@ -152,18 +134,16 @@ func TestGetOne(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		value, err := Get[User]("first", "users")
 		assert.Nil(t, err)
-		assert.Equal(t, "first", value.User)
+		assert.Equal(t, "first", value.Name)
 		assert.Equal(t, "password", value.Pass)
 	})
-	deleteTestEntries(t)
-	err = Close()
-	assert.Nil(t, err)
 }
 
 func TestGetAll(t *testing.T) {
-	err := Initialize("./test.db", tables)
+	err := testInit()
 	assert.Nil(t, err)
-	deleteTestEntries(t)
+	err = deleteTestEntries()
+	assert.Nil(t, err)
 	t.Run("noSuchTable", func(t *testing.T) {
 		value, err := GetAll[User]("nosuchtable")
 		assert.Equal(t, []User(nil), value)
@@ -178,16 +158,51 @@ func TestGetAll(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		value, err := GetAll[User]("users")
 		assert.Nil(t, err)
-		assert.Equal(t, "first", value[0].User)
+		assert.Equal(t, "first", value[0].Name)
 		assert.Equal(t, "password", value[0].Pass)
 	})
-	deleteTestEntries(t)
+	//deleteTestEntries(t)
+	err = Close()
+	assert.Nil(t, err)
+}
+
+func TestUpdate(t *testing.T) {
+	err := testInit()
+	assert.Nil(t, err)
+	err = deleteTestEntries()
+	assert.Nil(t, err)
+	t.Run("does not exist", func(t *testing.T) {
+		user := User{
+			Name: "testing",
+		}
+		err := Update(user, user.Name, "users")
+		assert.True(t, errors.Is(err, ErrExists))
+	})
+	t.Run("existing", func(t *testing.T) {
+		user := User{
+			Name: "testing",
+		}
+		err := Save(user, user.Name, "users")
+		assert.Nil(t, err)
+		user2 := User{
+			Name: "test2",
+			Pass: "nopass",
+		}
+		err = Update(user2, user.Name, "users")
+		assert.Nil(t, err)
+		user, err = Get[User](user.Name, "users")
+		assert.Nil(t, err)
+		assert.Equal(t, user2.Name, user.Name)
+	})
+	//deleteTestEntries(t)
 	err = Close()
 	assert.Nil(t, err)
 }
 
 func TestDelete(t *testing.T) {
-	err := Initialize("./test.db", tables)
+	err := testInit()
+	assert.Nil(t, err)
+	err = deleteTestEntries()
 	assert.Nil(t, err)
 	t.Run("nonexistentTable", func(t *testing.T) {
 		err := Delete[User]("first", "tabledoesnotexist")
@@ -202,7 +217,7 @@ func TestDelete(t *testing.T) {
 		err := Delete[User]("first", "users")
 		assert.Nil(t, err)
 	})
-	deleteTestEntries(t)
+	//deleteTestEntries(t)
 	err = Close()
 	assert.Nil(t, err)
 }
@@ -211,26 +226,51 @@ func createTestEntries(t *testing.T) {
 	t.Helper()
 	users := []User{
 		{
-			User: "first",
+			Name: "first",
 			Pass: "password",
 		},
 		{
-			User: "second",
+			Name: "second",
 			Pass: "testing",
 		},
 	}
 	for _, user := range users {
-		err := Save(user, user.User, "users")
+		err := Save(user, user.Name, "users")
 		assert.Nil(t, err)
 	}
 }
 
-func deleteTestEntries(t *testing.T) {
-	t.Helper()
+func deleteTestEntries() error {
+	//t.Helper()
 	values, err := GetAll[User]("users")
-	assert.Nil(t, err)
-	for _, value := range values {
-		err := Delete[User](value.User, "users")
-		assert.Nil(t, err)
+	if err != nil {
+		//if errors.Is(err, os.ErrNotExist) || errors.Is(err, ErrNoResults) {
+		//return nil
+		//}
+		if strings.Contains(err.Error(), "no results") {
+			return nil
+		}
+		return err
 	}
+	for _, value := range values {
+		if err := Delete[User](value.Name, "users"); err != nil {
+			if strings.Contains(err.Error(), "no results") {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func testInit() error {
+	if err := os.Remove("./test.db"); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if err := Initialize("./test.db", tables); err != nil {
+		return err
+	}
+	return nil
 }
