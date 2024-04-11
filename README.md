@@ -47,14 +47,14 @@ if err := boltdb.Save(user, user.Username, userTable); err != nil {
 ### Read
 return value of key in table
 ````
-user, err := boltdb.Get(models.User{}, "admin", userTable)
+user, err := boltdb.Get[models.User]("admin", userTable)
 if err != nil {
   return err
 }
 ````
 retrieve all values from table
 ````
-users, err := boltdb.GetAll(models.User{}, userTable)
+users, err := boltdb.GetAll[models.User](userTable)
 if err != nil {
   return err
 }
@@ -62,7 +62,7 @@ if err != nil {
 ### Delete
 delete value of key in table
 ````
-if err := boltdb.Delete("admin", userTable); err != nil {
+if err := boltdb.Delete[models.User]("admin", userTable); err != nil {
   return err
 }
 ````
