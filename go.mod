@@ -1,10 +1,11 @@
 module github.com/devilcove/boltdb
 
 go 1.21.5
+toolchain go1.22.5
 
 require (
 	github.com/stretchr/testify v1.9.0
-	go.etcd.io/bbolt v1.3.10
+	go.etcd.io/bbolt v1.3.11
 )
 
 require (
