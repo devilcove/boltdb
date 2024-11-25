@@ -5,7 +5,7 @@ go 1.22
 toolchain go1.23.0
 
 require (
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	go.etcd.io/bbolt v1.3.11
 )
 
