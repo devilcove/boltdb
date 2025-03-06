@@ -62,7 +62,7 @@ func createTable(name string) error {
 // Tables returns array of table names.
 func Tables() []string {
 	tables := []string{}
-	db.View(func(tx *bbolt.Tx) error {
+	db.View(func(tx *bbolt.Tx) error { //nolint:errcheck
 		bucket := tx.Inspect()
 		for _, v := range bucket.Children {
 			tables = append(tables, v.Name)
