@@ -45,6 +45,10 @@ if err := boltdb.Save(user, user.Username, userTable); err != nil {
 ````
  
 ### Read
+read table names
+````
+tables := boltdb.Tables()
+````
 return value of key in table
 ````
 user, err := boltdb.Get[models.User]("admin", userTable)
