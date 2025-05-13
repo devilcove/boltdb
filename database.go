@@ -59,6 +59,19 @@ func createTable(name string) error {
 	return nil
 }
 
+// Tables returns array of table names.
+func Tables() []string {
+	tables := []string{}
+	db.View(func(tx *bbolt.Tx) error { //nolint:errcheck
+		bucket := tx.Inspect()
+		for _, v := range bucket.Children {
+			tables = append(tables, v.Name)
+		}
+		return nil
+	})
+	return tables
+}
+
 // Save saves a value under key in the specified table
 func Save(value any, key, table string) error {
 	marshalled, err := json.Marshal(&value)
