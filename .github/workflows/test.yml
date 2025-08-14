@@ -23,7 +23,7 @@ jobs:
           go vet ./...
           go test -v ./...
       - name: Update coverage report
-        uses: ncruces/go-coverage-report@v0.3.0
+        uses: ncruces/go-coverage-report@v0.3.1
         with:
           report: true
           chart: true
