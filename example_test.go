@@ -8,15 +8,15 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-const UserTable = "users"
-
 type User struct {
 	UserName string
 	Password string
 	IsAdmin  bool
 }
 
-func ExampleConnection() {
+const UserTable = "users"
+
+func ExampleStore_Connection() {
 	if AdminExists() {
 		fmt.Println("admin exists")
 	} else {
@@ -28,7 +28,8 @@ func ExampleConnection() {
 func AdminExists() bool {
 	var user User
 	var found bool
-	db := boltdb.Connection()
+	s := boltdb.Store{}
+	db := s.Connection()
 	if db == nil {
 		return found
 	}
