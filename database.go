@@ -85,6 +85,29 @@ func (s *Store) Delete[T any](key string, path Path) error {
 	})
 }
 
+// DeleteBucket deletes the bucket at path.
+func (s *Store) DeleteBucket(path Path) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		return deleteBucket(tx, path)
+	})
+}
+
+// EmptyBucket deletes all of a buckets children.
+func (s *Store) EmptyBucket(path Path) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := getBucket(tx, path)
+		if bucket == nil {
+			return ErrInvalidPath
+		}
+		return bucket.ForEach(func(k, v []byte) error {
+			if v == nil {
+				return bucket.DeleteBucket(k)
+			}
+			return bucket.Delete(k)
+		})
+	})
+}
+
 // Get retrieves a value for key in specified bucket.
 func (s *Store) Get[T any](key string, path Path) (T, error) {
 	var value T
@@ -157,6 +180,32 @@ func (s *Store) Insert(value any, key string, table Path) error {
 		return s.Save(value, key, table)
 	}
 	return err
+}
+
+// MoveBucket copies bucket to new location and deletes original.
+func (s *Store) MoveBucket(src, dest Path) error {
+	var bucket *bbolt.Bucket
+	if len(src) == 0 || len(dest) == 0 {
+		return ErrInvalidPath
+	}
+	tx, err := s.Connection().Begin(true)
+	if err != nil {
+		return err
+	}
+
+	defer tx.Commit()
+	bucket = getBucket(tx, src)
+	if bucket == nil {
+		return ErrInvalidPath
+	}
+	if err := copyBucket(tx, bucket, dest); err != nil {
+		return err
+	}
+
+	if err := deleteBucket(tx, src); err != nil {
+		return errors.Join(err, tx.Rollback())
+	}
+	return nil
 }
 
 // Save saves a generic value under key in the specified bucket.
@@ -245,13 +294,27 @@ func (s *Store) createBuckets(buckets []Path) error {
 	})
 }
 
+func deleteBucket(tx *bbolt.Tx, path Path) error {
+	if len(path) == 0 {
+		return ErrInvalidPath
+	}
+	if len(path) == 1 {
+		return tx.DeleteBucket([]byte(path[0]))
+	}
+	parent := parentBucket(tx, path)
+	if parent == nil {
+		return ErrInvalidPath
+	}
+	return parent.DeleteBucket([]byte(path.last()))
+}
+
 func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
 	if len(path) == 0 {
 		return nil
 	}
 	dbpath := toDBPath(path)
 	bucket := tx.Bucket(dbpath[0])
-	if bucket == nil {
+	if bucket != nil {
 		return bucket
 	}
 	for _, p := range dbpath[1:] {
@@ -265,7 +328,7 @@ func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
 
 func parentBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
 	b := tx.Bucket([]byte(path[0]))
-	if len(path) == 1 {
+	if len(path) == 1 || b == nil {
 		return nil
 	}
 	for _, p := range path[1 : len(path)-1] {

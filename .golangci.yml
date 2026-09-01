@@ -85,7 +85,9 @@ linters:
     rules:
       - path: '_test.go'
         linters:
+          - dupl
           - gochecknoglobals
+
 
 formatters:
   enable:
