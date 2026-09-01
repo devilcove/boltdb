@@ -1,0 +1,103 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: all
+  disable:
+    - exhaustruct
+    - exhaustruct_v5
+    - forbidigo
+    - gomodguard
+    - musttag
+    - nlreturn
+    - noinlineerr
+    - paralleltest
+    - revive
+    - wrapcheck
+    - wsl
+    - wsl_v5
+
+  settings:
+    decorder:
+      disable-dec-order-check: false
+    depguard:
+      rules:
+        all:
+          list-mode: lax
+          files:
+            - $all
+          deny:
+            - pkg: github.com/goccy/go-yaml
+              desc: "use go.yaml.in/yaml/v4"
+            - pkg: gopkg.in/yaml.v2
+              desc: "use go.yaml.in/yaml/v4"
+            - pkg: gopkg.in/yaml.v3
+              desc: "use go.yaml.in/yaml/v4"
+            - pkg: github.com/gin-gonic/gin
+              desc: use std lib
+            - pkg: github.com/stretchr/testify
+              desc: use github.com/Kairum-Labs/should
+    embeddedstructfieldcheck:
+      empty-line: false
+      forbid-mutex: true
+    exhaustive:
+      default-signifies-exhaustive: true
+      default-case-required: true
+    exhaustruct:
+      allow-empty: true
+    funcorder:
+      alphabetical: true
+    ireturn:
+      allow:
+        - error
+        - generic
+    mnd:
+      ignored-functions:
+        - '^bbolt.Open'
+    revive:
+      enable-default-rules: true
+      rules:
+        - name: package-comments
+          disabled: true
+    varnamelen:
+      ignore-decls:
+        - s *boltdb.Store
+    wsl_v5:
+      allow-whole-block: true
+      default: default
+      disable:
+        - assign
+        - branch
+        - if
+        - return
+  exclusions:
+    warn-unused: true
+    generated: lax
+    presets:
+      #- comments
+      - common-false-positives
+      # - legacy
+      - std-error-handling
+    rules:
+      - path: '_test.go'
+        linters:
+          - gochecknoglobals
+
+formatters:
+  enable:
+    - gofumpt
+    - golines
+  settings:
+    gofumpt:
+     extra:
+      group-params: true
+  exclusions:
+    warn-unused: true
+    generated: lax
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0
+  uniq-by-line: false
+output:
+  path-mode: "abs"
+
