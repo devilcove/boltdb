@@ -117,7 +117,7 @@ func (s *Store) GetRaw(key []byte, path Path) ([]byte, error) {
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		bucket := getBucket(tx, path)
 		if bucket == nil {
-			return nil
+			return ErrInvalidPath
 		}
 		value = bucket.Get(key)
 		if value == nil {
