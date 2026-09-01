@@ -18,20 +18,20 @@ type Other struct {
 
 const testUser = "testing"
 
-var tables = []boltdb.Path{userTable, keysTable, tablesTable, nestedTable}
+var testBuckets = []boltdb.Path{userBucket, keysBucket, tablesBucket, nestedBucket}
 
 var (
-	userTable        = boltdb.Path{"users"}
-	invalidTable     = boltdb.Path{"invalidtablename"}
-	nestedTable      = boltdb.Path{"nested", "one"}
-	tablesTable      = boltdb.Path{"tables"}
-	keysTable        = boltdb.Path{"keys"}
-	emptyTable       = boltdb.Path{}
-	emptyNestedTable = boltdb.Path{"nested", "", "bar"}
+	userBucket        = boltdb.Path{"users"}
+	invalidBucket     = boltdb.Path{"invalidtablename"}
+	nestedBucket      = boltdb.Path{"nested", "one", "two"}
+	tablesBucket      = boltdb.Path{"tables"}
+	keysBucket        = boltdb.Path{"keys"}
+	emptyBucket       = boltdb.Path{}
+	emptyNestedBucket = boltdb.Path{"nested", "", "bar"}
 )
 
 func TestInitialize(t *testing.T) {
-	t.Log(tables)
+	t.Log(testBuckets)
 	t.Run("valid", func(t *testing.T) {
 		s, err := testInit()
 		should.BeNil(t, err)
@@ -40,7 +40,7 @@ func TestInitialize(t *testing.T) {
 	})
 	t.Run("pathDoesNotExist", func(t *testing.T) {
 		var pathError *fs.PathError
-		_, err := boltdb.Initialize("/tmp/thispathdoesnotexist/test.db", tables)
+		_, err := boltdb.Initialize("/tmp/thispathdoesnotexist/test.db", testBuckets)
 		should.BeTrue(t, errors.As(err, &pathError))
 	})
 }
@@ -49,16 +49,41 @@ func TestCreateBucket(t *testing.T) {
 	s, err := testInit()
 	should.NotBeError(t, err)
 	t.Run("invalid path", func(t *testing.T) {
-		should.BeErrorIs(t, s.CreateBucket(emptyTable), boltdb.ErrInvalidPath)
+		should.BeErrorIs(t, s.CreateBucket(emptyBucket), boltdb.ErrInvalidPath)
 	})
 	t.Run("invalid nested", func(t *testing.T) {
-		should.BeErrorIs(t, s.CreateBucket(emptyNestedTable), berror.ErrBucketNameRequired)
+		should.BeErrorIs(t, s.CreateBucket(emptyNestedBucket), berror.ErrBucketNameRequired)
 	})
 	t.Run("valid", func(t *testing.T) {
-		should.NotBeError(t, s.CreateBucket(userTable))
+		should.NotBeError(t, s.CreateBucket(userBucket))
 	})
 	t.Run("valid", func(t *testing.T) {
-		should.NotBeError(t, s.CreateBucket(nestedTable))
+		should.NotBeError(t, s.CreateBucket(nestedBucket))
+	})
+}
+
+func TestCopyBucket(t *testing.T) {
+	s, err := testInit()
+	should.NotBeError(t, err)
+	t.Run("non-existent src path", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyBucket(invalidBucket, keysBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("empty src path", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyBucket(emptyBucket, keysBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("empty dest path", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyBucket(userBucket, emptyNestedBucket),
+			berror.ErrBucketNameRequired)
+	})
+	t.Run("root to root", func(t *testing.T) {
+		should.NotBeError(t, s.CopyBucket(userBucket, keysBucket))
+	})
+	t.Run("root to nested", func(t *testing.T) {
+		should.NotBeError(t, s.CopyBucket(userBucket, nestedBucket))
+	})
+	t.Run("nested to root", func(t *testing.T) {
+		should.NotBeError(t, s.Insert("hello world", "key", nestedBucket))
+		should.NotBeError(t, s.CopyBucket(nestedBucket, keysBucket))
 	})
 }
 
@@ -95,7 +120,7 @@ func TestSave(t *testing.T) {
 	s, err := testInit()
 	should.BeNil(t, err)
 	t.Run("noSuchTable", func(t *testing.T) {
-		should.BeErrorIs(t, s.Save("testing", "key", invalidTable), boltdb.ErrInvalidPath)
+		should.BeErrorIs(t, s.Save("testing", "key", invalidBucket), boltdb.ErrInvalidPath)
 	})
 	t.Run("invalidjson", func(t *testing.T) {
 		function := func() {}
@@ -104,19 +129,19 @@ func TestSave(t *testing.T) {
 		}{
 			Function: function,
 		}
-		should.BeError(t, s.Save(value, "hello", userTable))
+		should.BeError(t, s.Save(value, "hello", userBucket))
 	})
 	t.Run("emptyTable", func(t *testing.T) {
-		should.BeErrorIs(t, s.Save("value", "key", emptyTable), boltdb.ErrInvalidPath)
+		should.BeErrorIs(t, s.Save("value", "key", emptyBucket), boltdb.ErrInvalidPath)
 	})
 	t.Run("emptyNestedTable", func(t *testing.T) {
-		should.BeErrorIs(t, s.Save("value", "key", emptyNestedTable), boltdb.ErrInvalidPath)
+		should.BeErrorIs(t, s.Save("value", "key", emptyNestedBucket), boltdb.ErrInvalidPath)
 	})
 	t.Run("valid", func(t *testing.T) {
-		should.NotBeError(t, s.Save(user, user.UserName, userTable))
+		should.NotBeError(t, s.Save(user, user.UserName, userBucket))
 	})
 	t.Run("nested", func(t *testing.T) {
-		should.NotBeError(t, s.Save(user, user.UserName, nestedTable))
+		should.NotBeError(t, s.Save(user, user.UserName, nestedBucket))
 	})
 	err = deleteTestEntries(s)
 	should.BeNil(t, err)
@@ -133,13 +158,13 @@ func TestInsert(t *testing.T) {
 	should.NotBeError(t, deleteTestEntries(s))
 
 	t.Run("valid", func(t *testing.T) {
-		should.NotBeError(t, s.Insert(user, user.UserName, userTable))
+		should.NotBeError(t, s.Insert(user, user.UserName, userBucket))
 	})
 	t.Run("exists", func(t *testing.T) {
-		should.BeErrorIs(t, s.Insert(user, user.UserName, userTable), boltdb.ErrExists)
+		should.BeErrorIs(t, s.Insert(user, user.UserName, userBucket), boltdb.ErrExists)
 	})
 	t.Run("invalid path", func(t *testing.T) {
-		should.BeErrorIs(t, s.Insert(user, user.UserName, invalidTable), boltdb.ErrInvalidPath)
+		should.BeErrorIs(t, s.Insert(user, user.UserName, invalidBucket), boltdb.ErrInvalidPath)
 	})
 	// deleteTestEntries(t)
 	err = s.Close()
@@ -154,28 +179,28 @@ func TestGetOne(t *testing.T) {
 	should.BeNil(t, err)
 	t.Log(err)
 	t.Run("noSuchTable", func(t *testing.T) {
-		value, err := s.Get[User]("first", invalidTable)
+		value, err := s.Get[User]("first", invalidBucket)
 		should.BeEqual(t, value, User{})
 		should.BeErrorIs(t, err, boltdb.ErrInvalidPath)
 	})
 	t.Run("noValues", func(t *testing.T) {
-		value, err := s.Get[User]("first", userTable)
+		value, err := s.Get[User]("first", userBucket)
 		should.BeEqual(t, value, User{})
 		should.BeErrorIs(t, err, boltdb.ErrNoResults)
 	})
 	createTestEntries(t, s)
 	t.Run("wrongkey", func(t *testing.T) {
-		value, err := s.Get[User]("third", userTable)
+		value, err := s.Get[User]("third", userBucket)
 		should.BeErrorIs(t, err, boltdb.ErrNoResults)
 		should.BeEqual(t, value, User{})
 	})
 	t.Run("wrongType", func(t *testing.T) {
-		value, err := s.Get[Other]("first", userTable)
+		value, err := s.Get[Other]("first", userBucket)
 		should.NotBeError(t, err)
 		should.BeEqual(t, value, Other{})
 	})
 	t.Run("valid", func(t *testing.T) {
-		value, err := s.Get[User]("first", userTable)
+		value, err := s.Get[User]("first", userBucket)
 		should.NotBeError(t, err)
 		should.BeEqual(t, value.UserName, "first")
 		should.BeEqual(t, value.Password, "password")
@@ -188,23 +213,23 @@ func TestGetAll(t *testing.T) {
 	err = deleteTestEntries(s)
 	should.NotBeError(t, err)
 	t.Run("noSuchTable", func(t *testing.T) {
-		value, err := s.GetAll[User](invalidTable)
+		value, err := s.GetAll[User](invalidBucket)
 		should.BeEmpty(t, value)
 		should.BeErrorIs(t, err, boltdb.ErrInvalidPath)
 	})
 	t.Run("noValues", func(t *testing.T) {
-		value, err := s.GetAll[User](userTable)
+		value, err := s.GetAll[User](userBucket)
 		should.BeEmpty(t, value)
 		should.NotBeError(t, err)
 	})
 	createTestEntries(t, s)
 	t.Run("wrongtype", func(t *testing.T) {
-		value, err := s.GetAll[string](userTable)
+		value, err := s.GetAll[string](userBucket)
 		should.BeError(t, err)
 		should.BeEmpty(t, value)
 	})
 	t.Run("valid", func(t *testing.T) {
-		value, err := s.GetAll[User](userTable)
+		value, err := s.GetAll[User](userBucket)
 		should.NotBeError(t, err)
 		should.BeEqual(t, value[0].UserName, "first")
 		should.BeEqual(t, value[0].Password, "password")
@@ -221,20 +246,20 @@ func TestUpdate(t *testing.T) {
 		user := User{
 			UserName: testUser,
 		}
-		err := s.Update(user, user.UserName, userTable)
+		err := s.Update(user, user.UserName, userBucket)
 		should.BeErrorIs(t, err, boltdb.ErrExists)
 	})
 	t.Run("existing", func(t *testing.T) {
 		user := User{
 			UserName: testUser,
 		}
-		should.NotBeError(t, s.Save(user, user.UserName, userTable))
+		should.NotBeError(t, s.Save(user, user.UserName, userBucket))
 		user2 := User{
 			UserName: "test2",
 			Password: "nopass",
 		}
-		should.NotBeError(t, s.Update(user2, user.UserName, userTable))
-		user, err = s.Get[User](user.UserName, userTable)
+		should.NotBeError(t, s.Update(user2, user.UserName, userBucket))
+		user, err = s.Get[User](user.UserName, userBucket)
 		should.NotBeError(t, err)
 		should.BeEqual(t, user.UserName, user2.UserName)
 	})
@@ -247,14 +272,14 @@ func TestDelete(t *testing.T) {
 	should.NotBeError(t, err)
 	should.NotBeError(t, deleteTestEntries(s))
 	t.Run("nonexistentTable", func(t *testing.T) {
-		should.BeErrorIs(t, s.Delete[User]("first", invalidTable), boltdb.ErrInvalidPath)
+		should.BeErrorIs(t, s.Delete[User]("first", invalidBucket), boltdb.ErrInvalidPath)
 	})
 	t.Run("nosuchrecord", func(t *testing.T) {
-		should.BeErrorIs(t, s.Delete[User]("first", userTable), boltdb.ErrNoResults)
+		should.BeErrorIs(t, s.Delete[User]("first", userBucket), boltdb.ErrNoResults)
 	})
 	t.Run("valid", func(t *testing.T) {
 		createTestEntries(t, s)
-		should.NotBeError(t, s.Delete[User]("first", userTable))
+		should.NotBeError(t, s.Delete[User]("first", userBucket))
 	})
 	// deleteTestEntries(t)
 	should.NotBeError(t, s.Close())
@@ -273,13 +298,13 @@ func createTestEntries(t *testing.T, s *boltdb.Store) {
 		},
 	}
 	for _, user := range users {
-		should.NotBeError(t, s.Save(user, user.UserName, userTable))
+		should.NotBeError(t, s.Save(user, user.UserName, userBucket))
 	}
 }
 
 func deleteTestEntries(s *boltdb.Store) error {
 	// t.Helper()
-	values, err := s.GetAll[User](userTable)
+	values, err := s.GetAll[User](userBucket)
 	if err != nil {
 		if errors.Is(err, boltdb.ErrNoResults) {
 			return nil
@@ -287,7 +312,7 @@ func deleteTestEntries(s *boltdb.Store) error {
 		return err
 	}
 	for _, value := range values {
-		if err := s.Delete[User](value.UserName, userTable); err != nil {
+		if err := s.Delete[User](value.UserName, userBucket); err != nil {
 			if errors.Is(err, boltdb.ErrNoResults) {
 				return nil
 			}
@@ -303,5 +328,5 @@ func testInit() (*boltdb.Store, error) {
 			return &boltdb.Store{}, err
 		}
 	}
-	return boltdb.Initialize("./test.db", tables)
+	return boltdb.Initialize("./test.db", testBuckets)
 }

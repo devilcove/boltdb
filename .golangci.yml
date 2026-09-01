@@ -61,8 +61,11 @@ linters:
           disabled: true
     varnamelen:
       ignore-decls:
+        - b *bbolt.Bucket
         - s *boltdb.Store
         - k []byte
+        - v []byte
+        - tx *bbolt.Tx
     wsl_v5:
       allow-whole-block: true
       default: default

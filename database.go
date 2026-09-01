@@ -45,9 +45,29 @@ func (s *Store) Connection() *bbolt.DB {
 	return s.db
 }
 
+// CopyBucket copies a bucket from src path to dest path.
+func (s *Store) CopyBucket(src, dest Path) error {
+	if len(src) == 0 || len(dest) == 0 {
+		return ErrInvalidPath
+	}
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		origin := tx.Bucket([]byte(src.last()))
+		if len(src) > 1 {
+			origin = parentBucket(tx, src)
+		}
+		if origin == nil {
+			return ErrInvalidPath
+		}
+		return copyBucket(tx, origin, dest)
+	})
+}
+
 // CreateBucket creates a new bucket at given path.
 func (s *Store) CreateBucket(path Path) error {
-	return s.createBucket(path)
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		_, err := createBucket(tx, toDBPath(path))
+		return err
+	})
 }
 
 // Delete deletes a key in a bucket.
@@ -181,34 +201,48 @@ func (s *Store) Update(value any, key string, bucket Path) error {
 	return ErrExists
 }
 
-func (s *Store) createBucket(name Path) error {
-	path := toDBPath(name)
-	if len(path) == 0 {
-		return ErrInvalidPath
+func copyBucket(tx *bbolt.Tx, bucket *bbolt.Bucket, dest Path) error {
+	replica, err := createBucket(tx, toDBPath(dest))
+	if err != nil {
+		return err
 	}
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(path[0])
-		if err != nil {
-			return err
+	return bucket.ForEach(func(k, v []byte) error {
+		if v == nil {
+			dest = append(dest, string(k))
+			nested := bucket.Bucket(k)
+			return copyBucket(tx, nested, dest)
 		}
-		for _, p := range path[1:] {
-			b, err = b.CreateBucketIfNotExists(p)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
+		return replica.Put(k, v)
 	})
 }
 
-func (s *Store) createBuckets(tables []Path) error {
-	var errs error
-	for _, table := range tables {
-		if err := s.createBucket(table); err != nil {
-			errs = errors.Join(errs, err)
+func createBucket(tx *bbolt.Tx, path path) (*bbolt.Bucket, error) {
+	if len(path) == 0 {
+		return nil, ErrInvalidPath
+	}
+	b, err := tx.CreateBucketIfNotExists(path[0])
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range path[1:] {
+		b, err = b.CreateBucketIfNotExists(p)
+		if err != nil {
+			return nil, err
 		}
 	}
-	return errs
+	return b, nil
+}
+
+func (s *Store) createBuckets(buckets []Path) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		var errs error
+		for _, p := range buckets {
+			if _, err := createBucket(tx, toDBPath(p)); err != nil {
+				errs = errors.Join(errs, err)
+			}
+		}
+		return errs
+	})
 }
 
 func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
@@ -227,4 +261,15 @@ func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
 		}
 	}
 	return bucket
+}
+
+func parentBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
+	b := tx.Bucket([]byte(path[0]))
+	if len(path) == 1 {
+		return nil
+	}
+	for _, p := range path[1 : len(path)-1] {
+		b = b.Bucket([]byte(p))
+	}
+	return b
 }
