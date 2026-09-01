@@ -45,6 +45,88 @@ func (s *Store) Connection() *bbolt.DB {
 	return s.db
 }
 
+// CreateBucket creates a new bucket at given path.
+func (s *Store) CreateBucket(path Path) error {
+	return s.createBucket(path)
+}
+
+// Delete deletes a key in a bucket.
+func (s *Store) Delete[T any](key string, path Path) error {
+	k := []byte(key)
+	// verify key exists
+
+	if _, err := s.GetRaw(k, path); err != nil {
+		return err
+	}
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := getBucket(tx, path)
+		// no need to check for nil bucket as GetRow above would err
+		return b.Delete(k)
+	})
+}
+
+// Get retrieves a value for key in specified bucket.
+func (s *Store) Get[T any](key string, path Path) (T, error) {
+	var value T
+	bytes, err := s.GetRaw([]byte(key), path)
+	if err != nil {
+		return value, err
+	}
+
+	err = json.Unmarshal(bytes, &value)
+	return value, err
+}
+
+// GetAll retrieves all values from bucket.
+func (s *Store) GetAll[T any](path Path) ([]T, error) {
+	var values []T
+	var value T
+	raw, err := s.GetAllRaw(path)
+	if err != nil {
+		return values, err
+	}
+	for _, r := range raw {
+		if err := json.Unmarshal(r, &value); err != nil {
+			return values, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func (s *Store) GetAllRaw(path Path) ([][]byte, error) {
+	var result [][]byte
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := getBucket(tx, path)
+		if b == nil {
+			return ErrInvalidPath
+		}
+		_ = b.ForEach(func(k, v []byte) error {
+			result = append(result, v)
+			return nil
+		})
+		return nil
+	})
+	return result, err
+}
+
+// GetRaw retrieves a value for key in a specified bucket.
+func (s *Store) GetRaw(key []byte, path Path) ([]byte, error) {
+	value := []byte{}
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		bucket := getBucket(tx, path)
+		if bucket == nil {
+			return ErrInvalidPath
+		}
+		value = bucket.Get(key)
+		if value == nil {
+			return ErrNoResults
+		}
+		return nil
+	})
+	return value, err
+}
+
 // Insert saves a value only if key does not exist.
 func (s *Store) Insert(value any, key string, table Path) error {
 	_, err := s.Get[any](key, table)
@@ -97,83 +179,6 @@ func (s *Store) Update(value any, key string, bucket Path) error {
 		return s.Save(value, key, bucket)
 	}
 	return ErrExists
-}
-
-// Get retrieves a value for key in specified bucket.
-func (s *Store) Get[T any](key string, path Path) (T, error) {
-	var value T
-	bytes, err := s.GetRaw([]byte(key), path)
-	if err != nil {
-		return value, err
-	}
-
-	err = json.Unmarshal(bytes, &value)
-	return value, err
-}
-
-// GetRaw retrieves a value for key in a specified bucket.
-func (s *Store) GetRaw(key []byte, path Path) ([]byte, error) {
-	value := []byte{}
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		bucket := getBucket(tx, path)
-		if bucket == nil {
-			return ErrInvalidPath
-		}
-		value = bucket.Get(key)
-		if value == nil {
-			return ErrNoResults
-		}
-		return nil
-	})
-	return value, err
-}
-
-// GetAll retrieves all values from bucket.
-func (s *Store) GetAll[T any](path Path) ([]T, error) {
-	var values []T
-	var value T
-	raw, err := s.GetAllRaw(path)
-	if err != nil {
-		return values, err
-	}
-	for _, r := range raw {
-		if err := json.Unmarshal(r, &value); err != nil {
-			return values, err
-		}
-		values = append(values, value)
-	}
-	return values, nil
-}
-
-func (s *Store) GetAllRaw(path Path) ([][]byte, error) {
-	var result [][]byte
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := getBucket(tx, path)
-		if b == nil {
-			return ErrInvalidPath
-		}
-		_ = b.ForEach(func(k, v []byte) error {
-			result = append(result, v)
-			return nil
-		})
-		return nil
-	})
-	return result, err
-}
-
-// Delete deletes a key in a bucket.
-func (s *Store) Delete[T any](key string, path Path) error {
-	k := []byte(key)
-	// verify key exists
-
-	if _, err := s.GetRaw(k, path); err != nil {
-		return err
-	}
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := getBucket(tx, path)
-		// no need to check for nil bucket as GetRow above would err
-		return b.Delete(k)
-	})
 }
 
 func (s *Store) createBucket(name Path) error {

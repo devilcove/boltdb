@@ -8,6 +8,7 @@ import (
 
 	"github.com/Kairum-Labs/should"
 	"github.com/devilcove/boltdb"
+	berror "go.etcd.io/bbolt/errors"
 )
 
 type Other struct {
@@ -26,7 +27,7 @@ var (
 	tablesTable      = boltdb.Path{"tables"}
 	keysTable        = boltdb.Path{"keys"}
 	emptyTable       = boltdb.Path{}
-	emptyNestedTable = boltdb.Path{"nested", "foo", "bar"}
+	emptyNestedTable = boltdb.Path{"nested", "", "bar"}
 )
 
 func TestInitialize(t *testing.T) {
@@ -41,6 +42,23 @@ func TestInitialize(t *testing.T) {
 		var pathError *fs.PathError
 		_, err := boltdb.Initialize("/tmp/thispathdoesnotexist/test.db", tables)
 		should.BeTrue(t, errors.As(err, &pathError))
+	})
+}
+
+func TestCreateBucket(t *testing.T) {
+	s, err := testInit()
+	should.NotBeError(t, err)
+	t.Run("invalid path", func(t *testing.T) {
+		should.BeErrorIs(t, s.CreateBucket(emptyTable), boltdb.ErrInvalidPath)
+	})
+	t.Run("invalid nested", func(t *testing.T) {
+		should.BeErrorIs(t, s.CreateBucket(emptyNestedTable), berror.ErrBucketNameRequired)
+	})
+	t.Run("valid", func(t *testing.T) {
+		should.NotBeError(t, s.CreateBucket(userTable))
+	})
+	t.Run("valid", func(t *testing.T) {
+		should.NotBeError(t, s.CreateBucket(nestedTable))
 	})
 }
 
@@ -59,7 +77,7 @@ func TestInitialize(t *testing.T) {
 
 func TestClose(t *testing.T) {
 	s, err := testInit()
-	should.BeNil(t, err)
+	should.NotBeError(t, err)
 	t.Run("open", func(t *testing.T) {
 		err = s.Close()
 		should.BeNil(t, err)

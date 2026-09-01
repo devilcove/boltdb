@@ -62,6 +62,7 @@ linters:
     varnamelen:
       ignore-decls:
         - s *boltdb.Store
+        - k []byte
     wsl_v5:
       allow-whole-block: true
       default: default
