@@ -1,6 +1,6 @@
 module github.com/devilcove/boltdb
 
-go 1.25.0
+go 1.27.0
 
 require (
 	github.com/Kairum-Labs/should v0.3.0

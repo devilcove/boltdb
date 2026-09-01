@@ -8,6 +8,7 @@ import (
 	"go.etcd.io/bbolt"
 )
 
+// Store represents a bbolt db store.
 type Store struct {
 	db *bbolt.DB
 }
@@ -16,8 +17,8 @@ type Store struct {
 var (
 	// ErrNoResults indicates query found no results.
 	ErrNoResults = errors.New("no results found")
-	// ErrInvalidTableName indicates that specified table does not exist.
-	ErrInvalidTableName = errors.New("invalid table")
+	// ErrInvalidPath indicates that specified bucket does not exist.
+	ErrInvalidPath = errors.New("invalid path")
 	// ErrNoConnection indicates that database is not open.
 	ErrNoConnection = errors.New("no db connection")
 	// ErrExists indicates that a key exists.
@@ -25,13 +26,13 @@ var (
 )
 
 // Initialize sets up bbolt db using file path and creates tables if required.
-func Initialize(file string, tables []string) (*Store, error) {
+func Initialize(file string, buckets []Path) (*Store, error) {
 	db, err := bbolt.Open(file, 0o666, &bbolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return &Store{}, err
 	}
 	s := &Store{db: db}
-	return s, s.createTables(tables)
+	return s, s.createBuckets(buckets)
 }
 
 // Close closes the database.
@@ -45,8 +46,8 @@ func (s *Store) Connection() *bbolt.DB {
 }
 
 // Insert saves a value only if key does not exist.
-func (s *Store) Insert(value any, key, table string) error {
-	_, err := Get[any](s, key, table)
+func (s *Store) Insert(value any, key string, table Path) error {
+	_, err := s.Get[any](key, table)
 	if err == nil {
 		return ErrExists
 	}
@@ -56,18 +57,23 @@ func (s *Store) Insert(value any, key, table string) error {
 	return err
 }
 
-// Save saves a value under key in the specified table.
-func (s *Store) Save(value any, key, table string) error {
+// Save saves a generic value under key in the specified bucket.
+func (s *Store) Save(value any, key string, path Path) error {
 	marshalled, err := json.Marshal(&value)
 	if err != nil {
 		return err
 	}
+	return s.SaveRaw(marshalled, []byte(key), path)
+}
+
+// SaveRaw saves a byte value in a bucket.
+func (s *Store) SaveRaw(value, key []byte, path Path) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(table))
+		b := getBucket(tx, path)
 		if b == nil {
-			return ErrInvalidTableName
+			return ErrInvalidPath
 		}
-		return b.Put([]byte(key), marshalled)
+		return b.Put(key, value)
 	})
 }
 
@@ -85,85 +91,135 @@ func (s *Store) Tables() []string {
 }
 
 // Update save a value only if key already exists.
-func (s *Store) Update(value any, key, table string) error {
-	_, err := Get[any](s, key, table)
+func (s *Store) Update(value any, key string, bucket Path) error {
+	_, err := s.Get[any](key, bucket)
 	if err == nil {
-		return s.Save(value, key, table)
+		return s.Save(value, key, bucket)
 	}
 	return ErrExists
 }
 
-// Get retrieves a value for key in specified table.
-func Get[T any](s *Store, key, table string) (T, error) {
+// Get retrieves a value for key in specified bucket.
+func (s *Store) Get[T any](key string, path Path) (T, error) {
 	var value T
+	bytes, err := s.GetRaw([]byte(key), path)
+	if err != nil {
+		return value, err
+	}
+
+	err = json.Unmarshal(bytes, &value)
+	return value, err
+}
+
+// GetRaw retrieves a value for key in a specified bucket.
+func (s *Store) GetRaw(key []byte, path Path) ([]byte, error) {
+	value := []byte{}
 	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(table))
-		if b == nil {
-			return ErrInvalidTableName
+		bucket := getBucket(tx, path)
+		if bucket == nil {
+			return nil
 		}
-		v := b.Get([]byte(key))
-		if v == nil {
+		value = bucket.Get(key)
+		if value == nil {
 			return ErrNoResults
-		}
-		if err := json.Unmarshal(v, &value); err != nil {
-			return err
 		}
 		return nil
 	})
 	return value, err
 }
 
-// GetAll retrieves all values from table.
-func GetAll[T any](s *Store, table string) ([]T, error) {
+// GetAll retrieves all values from bucket.
+func (s *Store) GetAll[T any](path Path) ([]T, error) {
 	var values []T
+	var value T
+	raw, err := s.GetAllRaw(path)
+	if err != nil {
+		return values, err
+	}
+	for _, r := range raw {
+		if err := json.Unmarshal(r, &value); err != nil {
+			return values, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func (s *Store) GetAllRaw(path Path) ([][]byte, error) {
+	var result [][]byte
 	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(table))
+		b := getBucket(tx, path)
 		if b == nil {
-			return ErrInvalidTableName
+			return ErrInvalidPath
 		}
 		_ = b.ForEach(func(k, v []byte) error {
-			var value T
-			if err := json.Unmarshal(v, &value); err != nil {
-				return err
-			}
-			values = append(values, value)
+			result = append(result, v)
 			return nil
 		})
 		return nil
 	})
-	return values, err
+	return result, err
 }
 
-// Delete deletes the entry in table corresponding to key.
-func Delete[T any](s *Store, key, table string) error {
-	// verify table exists
-	if _, err := Get[T](s, key, table); err != nil {
+// Delete deletes a key in a bucket.
+func (s *Store) Delete[T any](key string, path Path) error {
+	k := []byte(key)
+	// verify key exists
+
+	if _, err := s.GetRaw(k, path); err != nil {
 		return err
 	}
-	err := s.db.Update(func(tx *bbolt.Tx) error {
-		return tx.Bucket([]byte(table)).Delete([]byte(key))
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := getBucket(tx, path)
+		// no need to check for nil bucket as GetRow above would err
+		return b.Delete(k)
 	})
-	return err
 }
 
-func (s *Store) createTable(name string) error {
-	if err := s.db.Update(func(tx *bbolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
+func (s *Store) createBucket(name Path) error {
+	path := toDBPath(name)
+	if len(path) == 0 {
+		return ErrInvalidPath
+	}
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists(path[0])
+		if err != nil {
 			return err
 		}
+		for _, p := range path[1:] {
+			b, err = b.CreateBucketIfNotExists(p)
+			if err != nil {
+				return err
+			}
+		}
 		return nil
-	}); err != nil {
-		return err
-	}
-	return nil
+	})
 }
 
-func (s *Store) createTables(tables []string) error {
+func (s *Store) createBuckets(tables []Path) error {
 	var errs error
 	for _, table := range tables {
-		if err := s.createTable(table); err != nil {
+		if err := s.createBucket(table); err != nil {
 			errs = errors.Join(errs, err)
 		}
 	}
 	return errs
+}
+
+func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
+	if len(path) == 0 {
+		return nil
+	}
+	dbpath := toDBPath(path)
+	bucket := tx.Bucket(dbpath[0])
+	if bucket == nil {
+		return bucket
+	}
+	for _, p := range dbpath[1:] {
+		bucket = bucket.Bucket(p)
+		if bucket == nil {
+			return bucket
+		}
+	}
+	return bucket
 }
