@@ -178,6 +178,12 @@ func TestMoveBucket(t *testing.T) {
 	})
 }
 
+func TestRenameBucket(t *testing.T) {
+	s, err := testInit()
+	should.BeNil(t, err)
+	should.NotBeError(t, s.RenameBucket(userBucket, "hello"))
+}
+
 func TestSave(t *testing.T) {
 	user := User{
 		UserName: testUser,

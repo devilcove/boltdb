@@ -3,6 +3,7 @@ package boltdb
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"go.etcd.io/bbolt"
@@ -206,6 +207,13 @@ func (s *Store) MoveBucket(src, dest Path) error {
 		return errors.Join(err, tx.Rollback())
 	}
 	return nil
+}
+
+// RenameBucket renames a bucket.
+func (s *Store) RenameBucket(path Path, name string) error {
+	newPath := slices.Clone(path)
+	newPath[len(newPath)-1] = name
+	return s.MoveBucket(path, newPath)
 }
 
 // Save saves a generic value under key in the specified bucket.
