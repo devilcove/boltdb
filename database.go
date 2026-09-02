@@ -233,7 +233,6 @@ func (s *Store) MoveBucket(src, dest Path) error {
 		return err
 	}
 
-	// defer tx.Commit()
 	bucket = getBucket(tx, src)
 	if bucket == nil {
 		return errors.Join(tx.Rollback(), ErrInvalidPath)
@@ -246,6 +245,38 @@ func (s *Store) MoveBucket(src, dest Path) error {
 		return errors.Join(err, tx.Rollback())
 	}
 
+	return tx.Commit()
+}
+
+// MoveKey copies a key to new destination and deletes original.
+func (s *Store) MoveKey(src, dest Path) error {
+	if len(src) < 2 || len(dest) < 2 {
+		return ErrInvalidPath
+	}
+	srcKeyName := toDBPath(src).last()
+	destKeyName := toDBPath(dest).last()
+	tx, err := s.Connection().Begin(true)
+	if err != nil {
+		return err
+	}
+	value, err := getRaw(tx, srcKeyName, src[:len(src)-1])
+	if err != nil {
+		return errors.Join(err, tx.Rollback())
+	}
+	parent := parentBucket(tx, dest)
+	if parent == nil {
+		return errors.Join(ErrInvalidPath, tx.Rollback())
+	}
+	if v := parent.Get(destKeyName); v != nil {
+		return errors.Join(ErrExists, tx.Rollback())
+	}
+	if err := parent.Put(destKeyName, value); err != nil {
+		return errors.Join(err, tx.Rollback())
+	}
+	parent = parentBucket(tx, src)
+	if err := parent.Delete(srcKeyName); err != nil {
+		return errors.Join(err, tx.Rollback())
+	}
 	return tx.Commit()
 }
 

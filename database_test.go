@@ -184,6 +184,8 @@ func TestEmptyBucket(t *testing.T) {
 func TestMoveBucket(t *testing.T) {
 	s, err := testInit()
 	should.NotBeError(t, err)
+	createTestEntries(t, s)
+
 	t.Run("non-existent src path", func(t *testing.T) {
 		should.BeErrorIs(t, s.MoveBucket(invalidBucket, keysBucket), boltdb.ErrInvalidPath)
 	})
@@ -202,6 +204,40 @@ func TestMoveBucket(t *testing.T) {
 	t.Run("nested to root", func(t *testing.T) {
 		should.NotBeError(t, s.Insert("hello world", "key", nestedBucket))
 		should.NotBeError(t, s.MoveBucket(nestedBucket, keysBucket))
+	})
+}
+
+func TestMoveKey(t *testing.T) {
+	s, err := testInit()
+	should.NotBeError(t, err)
+	createTestEntries(t, s)
+	t.Run("non-existent src path", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveKey(invalidBucket, keysBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("empty src path", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveKey(emptyBucket, keysBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("src is bucket", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveKey(userBucket, userKeyNested), boltdb.ErrInvalidPath)
+	})
+	t.Run("to bucket", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveKey(userKeyFirst, nestedBucket), berror.ErrIncompatibleValue)
+	})
+	t.Run("empty dest path", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveKey(userKeyFirst, emptyNestedBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("to self", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveKey(userKeyFirst, userKeyFirst), boltdb.ErrExists)
+	})
+	t.Run("to existing key", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveKey(userKeyFirst, userKeySecond), boltdb.ErrExists)
+	})
+	t.Run("root to nested", func(t *testing.T) {
+		should.NotBeError(t, s.MoveKey(userKeySecond, userKeyNested))
+	})
+	t.Run("nested to root", func(t *testing.T) {
+		should.NotBeError(t, s.Insert("value", "hello world", nestedBucket))
+		should.NotBeError(t, s.MoveKey(append(nestedBucket, "hello world"), userKeySecond))
 	})
 }
 
@@ -260,6 +296,9 @@ func TestInsert(t *testing.T) {
 
 	t.Run("valid", func(t *testing.T) {
 		should.NotBeError(t, s.Insert(user, user.UserName, userBucket))
+	})
+	t.Run("name with space", func(t *testing.T) {
+		should.NotBeError(t, s.Insert("value", "hello world", userBucket))
 	})
 	t.Run("exists", func(t *testing.T) {
 		should.BeErrorIs(t, s.Insert(user, user.UserName, userBucket), boltdb.ErrExists)
