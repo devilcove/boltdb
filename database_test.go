@@ -30,6 +30,9 @@ var (
 	keysBucket        = boltdb.Path{"keys"}
 	emptyBucket       = boltdb.Path{}
 	emptyNestedBucket = boltdb.Path{"foo", "", "bar"}
+	userKeyFirst      = boltdb.Path{"users", "first"}
+	userKeySecond     = boltdb.Path{"users", "second"}
+	userKeyNested     = boltdb.Path{"nested", "one", "key"}
 )
 
 func TestInitialize(t *testing.T) {
@@ -86,6 +89,31 @@ func TestCopyBucket(t *testing.T) {
 	t.Run("nested to root", func(t *testing.T) {
 		should.NotBeError(t, s.Insert("hello world", "key", nestedBucket))
 		should.NotBeError(t, s.CopyBucket(nestedBucket, keysBucket))
+	})
+}
+
+func TestCopyKey(t *testing.T) {
+	s, err := testInit()
+	should.NotBeError(t, err)
+	createTestEntries(t, s)
+	t.Run("invalid src path", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyKey(emptyBucket, keysBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("invalid dest path", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyKey(userKeyFirst, emptyBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("copy to bucket", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyKey(userKeyFirst, nestedBucket), berror.ErrIncompatibleValue)
+	})
+	t.Run("copy to self", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyKey(userKeyFirst, userKeyFirst), boltdb.ErrExists)
+	})
+	t.Run("copy to existing", func(t *testing.T) {
+		should.BeErrorIs(t, s.CopyKey(userKeyFirst, userKeySecond), boltdb.ErrExists)
+	})
+	t.Run("valid", func(t *testing.T) {
+		should.NotBeError(t, s.CopyKey(userKeyFirst, userKeyNested))
+		// key
 	})
 }
 
@@ -162,12 +190,11 @@ func TestMoveBucket(t *testing.T) {
 	t.Run("empty src path", func(t *testing.T) {
 		should.BeErrorIs(t, s.MoveBucket(emptyBucket, keysBucket), boltdb.ErrInvalidPath)
 	})
-	t.Run("empty dest path", func(t *testing.T) {
-		should.BeErrorIs(t, s.MoveBucket(userBucket, emptyNestedBucket),
-			berror.ErrBucketNameRequired)
-	})
 	t.Run("root to root", func(t *testing.T) {
 		should.NotBeError(t, s.MoveBucket(userBucket, keysBucket))
+	})
+	t.Run("empty dest path", func(t *testing.T) {
+		should.BeErrorIs(t, s.MoveBucket(userBucket, emptyNestedBucket), boltdb.ErrInvalidPath)
 	})
 	t.Run("root to nested", func(t *testing.T) {
 		should.NotBeError(t, s.MoveBucket(tablesBucket, nestedBucket))
@@ -205,9 +232,12 @@ func TestSave(t *testing.T) {
 	t.Run("emptyTable", func(t *testing.T) {
 		should.BeErrorIs(t, s.Save("value", "key", emptyBucket), boltdb.ErrInvalidPath)
 	})
-	// t.Run("emptyNestedTable", func(t *testing.T) {
-	// 	should.BeErrorIs(t, s.Save("value", "key", emptyNestedBucket), boltdb.ErrInvalidPath)
-	// })
+	t.Run("emptyNestedTable", func(t *testing.T) {
+		should.BeErrorIs(t, s.Save("value", "key", emptyNestedBucket), boltdb.ErrInvalidPath)
+	})
+	t.Run("dest key name is bucket", func(t *testing.T) {
+		should.NotBeError(t, s.Save("value", "two", boltdb.Path{"nested", "one"}))
+	})
 	t.Run("valid", func(t *testing.T) {
 		should.NotBeError(t, s.Save(user, user.UserName, userBucket))
 	})
@@ -343,14 +373,14 @@ func TestDelete(t *testing.T) {
 	should.NotBeError(t, err)
 	should.NotBeError(t, deleteTestEntries(s))
 	t.Run("nonexistentTable", func(t *testing.T) {
-		should.BeErrorIs(t, s.Delete[User]("first", invalidBucket), boltdb.ErrInvalidPath)
+		should.BeErrorIs(t, s.Delete("first", invalidBucket), boltdb.ErrInvalidPath)
 	})
 	t.Run("nosuchrecord", func(t *testing.T) {
-		should.BeErrorIs(t, s.Delete[User]("first", userBucket), boltdb.ErrNoResults)
+		should.BeErrorIs(t, s.Delete("first", userBucket), boltdb.ErrNoResults)
 	})
 	t.Run("valid", func(t *testing.T) {
 		createTestEntries(t, s)
-		should.NotBeError(t, s.Delete[User]("first", userBucket))
+		should.NotBeError(t, s.Delete("first", userBucket))
 	})
 	// deleteTestEntries(t)
 	should.NotBeError(t, s.Close())
@@ -383,7 +413,7 @@ func deleteTestEntries(s *boltdb.Store) error {
 		return err
 	}
 	for _, value := range values {
-		if err := s.Delete[User](value.UserName, userBucket); err != nil {
+		if err := s.Delete(value.UserName, userBucket); err != nil {
 			if errors.Is(err, boltdb.ErrNoResults) {
 				return nil
 			}

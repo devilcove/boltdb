@@ -23,7 +23,7 @@ var (
 	// ErrNoConnection indicates that database is not open.
 	ErrNoConnection = errors.New("no db connection")
 	// ErrExists indicates that a key exists.
-	ErrExists = errors.New("key existss")
+	ErrExists = errors.New("key exists")
 )
 
 // Initialize sets up bbolt db using file path and creates tables if required.
@@ -63,6 +63,35 @@ func (s *Store) CopyBucket(src, dest Path) error {
 	})
 }
 
+// CopyKey copies a key from src parent bucket to dest bucket.
+func (s *Store) CopyKey(sKey, dKey Path) error {
+	if len(sKey) < 2 || len(dKey) < 2 {
+		return ErrInvalidPath
+	}
+	name := []byte(sKey.last())
+	dname := []byte(dKey.last())
+	dbucket := toDBPath(dKey)[:len(dKey)-1]
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		value, err := getRaw(tx, name, sKey)
+		if err != nil {
+			return err
+		}
+		k, err := getRaw(tx, name, dKey)
+		if k != nil {
+			return ErrExists
+		}
+		if err != nil && !errors.Is(err, ErrNoResults) {
+			return err
+		}
+		parent, err := createBucket(tx, dbucket)
+		// parent := getBucket(tx, dKey)
+		if err != nil {
+			return err
+		}
+		return parent.Put(dname, value)
+	})
+}
+
 // CreateBucket creates a new bucket at given path.
 func (s *Store) CreateBucket(path Path) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
@@ -72,7 +101,7 @@ func (s *Store) CreateBucket(path Path) error {
 }
 
 // Delete deletes a key in a bucket.
-func (s *Store) Delete[T any](key string, path Path) error {
+func (s *Store) Delete(key string, path Path) error {
 	k := []byte(key)
 	// verify key exists
 
@@ -154,31 +183,41 @@ func (s *Store) GetAllRaw(path Path) ([][]byte, error) {
 	return result, err
 }
 
-// GetRaw retrieves a value for key in a specified bucket.
+// GetRaw retrieves the value of a key in specified bucket.
 func (s *Store) GetRaw(key []byte, path Path) ([]byte, error) {
 	value := []byte{}
 	err := s.db.View(func(tx *bbolt.Tx) error {
-		bucket := getBucket(tx, path)
-		if bucket == nil {
-			return ErrInvalidPath
-		}
-		value = bucket.Get(key)
-		if value == nil {
-			return ErrNoResults
-		}
-		return nil
+		var err error
+		value, err = getRaw(tx, key, path)
+		return err
 	})
 	return value, err
 }
 
+func getRaw(tx *bbolt.Tx, key []byte, path Path) ([]byte, error) {
+	var (
+		value []byte
+		err   error
+	)
+	bucket := getBucket(tx, path)
+	if bucket == nil {
+		return value, ErrInvalidPath
+	}
+	value = bucket.Get(key)
+	if value == nil {
+		err = ErrNoResults
+	}
+	return value, err
+}
+
 // Insert saves a value only if key does not exist.
-func (s *Store) Insert(value any, key string, table Path) error {
-	_, err := s.Get[any](key, table)
+func (s *Store) Insert(value any, key string, bucket Path) error {
+	_, err := s.Get[any](key, bucket)
 	if err == nil {
 		return ErrExists
 	}
 	if errors.Is(err, ErrNoResults) {
-		return s.Save(value, key, table)
+		return s.Save(value, key, bucket)
 	}
 	return err
 }
@@ -194,19 +233,20 @@ func (s *Store) MoveBucket(src, dest Path) error {
 		return err
 	}
 
-	defer tx.Commit()
+	// defer tx.Commit()
 	bucket = getBucket(tx, src)
 	if bucket == nil {
-		return ErrInvalidPath
+		return errors.Join(tx.Rollback(), ErrInvalidPath)
 	}
 	if err := copyBucket(tx, bucket, dest); err != nil {
-		return err
+		return errors.Join(err, tx.Rollback())
 	}
 
 	if err := deleteBucket(tx, src); err != nil {
 		return errors.Join(err, tx.Rollback())
 	}
-	return nil
+
+	return tx.Commit()
 }
 
 // RenameBucket renames a bucket.
@@ -326,6 +366,9 @@ func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
 		return bucket
 	}
 	for _, p := range dbpath[1:] {
+		if len(p) == 0 {
+			return nil
+		}
 		bucket = bucket.Bucket(p)
 		if bucket == nil {
 			return bucket

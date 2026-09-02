@@ -87,6 +87,7 @@ linters:
         linters:
           - dupl
           - gochecknoglobals
+          - goconst
 
 
 formatters:
