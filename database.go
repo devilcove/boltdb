@@ -101,15 +101,15 @@ func (s *Store) CreateBucket(path Path) error {
 }
 
 // Delete deletes a key in a bucket.
-func (s *Store) Delete(key string, path Path) error {
+func (s *Store) Delete(key string, parent Path) error {
 	k := []byte(key)
 	// verify key exists
 
-	if _, err := s.GetRaw(k, path); err != nil {
+	if _, err := s.GetRaw(k, parent); err != nil {
 		return err
 	}
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := getBucket(tx, path)
+		b := getBucket(tx, parent)
 		// no need to check for nil bucket as GetRow above would err
 		return b.Delete(k)
 	})
