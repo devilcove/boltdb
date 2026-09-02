@@ -282,9 +282,22 @@ func (s *Store) MoveKey(src, dest Path) error {
 
 // RenameBucket renames a bucket.
 func (s *Store) RenameBucket(path Path, name string) error {
+	if len(path) == 0 {
+		return ErrInvalidPath
+	}
 	newPath := slices.Clone(path)
 	newPath[len(newPath)-1] = name
 	return s.MoveBucket(path, newPath)
+}
+
+// RenameKey renames a Key.
+func (s *Store) RenameKey(path Path, name string) error {
+	if len(path) < 2 {
+		return ErrInvalidPath
+	}
+	newPath := slices.Clone(path)
+	newPath[len(newPath)-1] = name
+	return s.MoveKey(path, newPath)
 }
 
 // Save saves a generic value under key in the specified bucket.
@@ -322,11 +335,10 @@ func (s *Store) Tables() []string {
 
 // Update save a value only if key already exists.
 func (s *Store) Update(value any, key string, bucket Path) error {
-	_, err := s.Get[any](key, bucket)
-	if err == nil {
-		return s.Save(value, key, bucket)
+	if _, err := s.Get[any](key, bucket); err != nil {
+		return err
 	}
-	return ErrExists
+	return s.Save(value, key, bucket)
 }
 
 func copyBucket(tx *bbolt.Tx, bucket *bbolt.Bucket, dest Path) error {

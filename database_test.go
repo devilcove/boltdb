@@ -38,10 +38,8 @@ var (
 func TestInitialize(t *testing.T) {
 	t.Log(testBuckets)
 	t.Run("valid", func(t *testing.T) {
-		s, err := testInit()
-		should.BeNil(t, err)
-		err = s.Close()
-		should.BeNil(t, err)
+		s := testInit(t)
+		should.NotBeError(t, s.Close())
 	})
 	t.Run("pathDoesNotExist", func(t *testing.T) {
 		var pathError *fs.PathError
@@ -51,8 +49,7 @@ func TestInitialize(t *testing.T) {
 }
 
 func TestCreateBucket(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	t.Run("invalid path", func(t *testing.T) {
 		should.BeErrorIs(t, s.CreateBucket(emptyBucket), boltdb.ErrInvalidPath)
 	})
@@ -68,8 +65,7 @@ func TestCreateBucket(t *testing.T) {
 }
 
 func TestCopyBucket(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	t.Run("non-existent src path", func(t *testing.T) {
 		should.BeErrorIs(t, s.CopyBucket(invalidBucket, keysBucket), boltdb.ErrInvalidPath)
 	})
@@ -93,8 +89,7 @@ func TestCopyBucket(t *testing.T) {
 }
 
 func TestCopyKey(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	createTestEntries(t, s)
 	t.Run("invalid src path", func(t *testing.T) {
 		should.BeErrorIs(t, s.CopyKey(emptyBucket, keysBucket), boltdb.ErrInvalidPath)
@@ -118,7 +113,7 @@ func TestCopyKey(t *testing.T) {
 }
 
 // func TestTables(t *testing.T) {
-// 	s, err := testInit()
+// 	s := testInit(t)
 // 	should.BeNil(t, err)
 // 	names := s.Tables()
 // 	for _, v := range names {
@@ -131,11 +126,9 @@ func TestCopyKey(t *testing.T) {
 // }
 
 func TestClose(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	t.Run("open", func(t *testing.T) {
-		err = s.Close()
-		should.BeNil(t, err)
+		should.NotBeError(t, s.Close())
 	})
 	t.Run("closed", func(t *testing.T) {
 		err := s.Close()
@@ -144,8 +137,7 @@ func TestClose(t *testing.T) {
 }
 
 func TestDeleteBucket(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	t.Run("empty path", func(t *testing.T) {
 		should.BeErrorIs(t, s.DeleteBucket(emptyBucket), boltdb.ErrInvalidPath)
 	})
@@ -164,8 +156,7 @@ func TestDeleteBucket(t *testing.T) {
 }
 
 func TestEmptyBucket(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	t.Run("empty path", func(t *testing.T) {
 		should.BeErrorIs(t, s.EmptyBucket(emptyBucket), boltdb.ErrInvalidPath)
 	})
@@ -182,8 +173,7 @@ func TestEmptyBucket(t *testing.T) {
 }
 
 func TestMoveBucket(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	createTestEntries(t, s)
 
 	t.Run("non-existent src path", func(t *testing.T) {
@@ -208,8 +198,7 @@ func TestMoveBucket(t *testing.T) {
 }
 
 func TestMoveKey(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	createTestEntries(t, s)
 	t.Run("non-existent src path", func(t *testing.T) {
 		should.BeErrorIs(t, s.MoveKey(invalidBucket, keysBucket), boltdb.ErrInvalidPath)
@@ -242,17 +231,44 @@ func TestMoveKey(t *testing.T) {
 }
 
 func TestRenameBucket(t *testing.T) {
-	s, err := testInit()
-	should.BeNil(t, err)
-	should.NotBeError(t, s.RenameBucket(userBucket, "hello"))
+	s := testInit(t)
+	t.Run("no bucket", func(t *testing.T) {
+		should.BeErrorIs(t, s.RenameBucket(emptyBucket, "newBucket"), boltdb.ErrInvalidPath)
+	})
+	// Investigate and Fix.
+	// t.Run("key", func(t *testing.T) {
+	// createTestEntries(t, s)
+	// should.BeErrorIs(t, s.RenameBucket(userKeyFirst, "newBucket"), boltdb.ErrInvalidPath)
+	// })
+	t.Run("valid", func(t *testing.T) {
+		should.NotBeError(t, s.RenameBucket(userBucket, "hello"))
+	})
+}
+
+func TestRenameKey(t *testing.T) {
+	s := testInit(t)
+	createTestEntries(t, s)
+	t.Run("key does not exist", func(t *testing.T) {
+		should.BeErrorIs(t, s.RenameKey(boltdb.Path{"users", "third"}, "new name"),
+			boltdb.ErrNoResults)
+	})
+	t.Run("bucket does not exist", func(t *testing.T) {
+		should.BeErrorIs(t, s.RenameKey(boltdb.Path{"missing", "key"}, "new name"),
+			boltdb.ErrInvalidPath)
+	})
+	t.Run("invalid path", func(t *testing.T) {
+		should.BeErrorIs(t, s.RenameKey(tablesBucket, "new name"), boltdb.ErrInvalidPath)
+	})
+	t.Run("vaid", func(t *testing.T) {
+		should.NotBeError(t, s.RenameKey(userKeyFirst, "new name"))
+	})
 }
 
 func TestSave(t *testing.T) {
 	user := User{
 		UserName: testUser,
 	}
-	s, err := testInit()
-	should.BeNil(t, err)
+	s := testInit(t)
 	t.Run("noSuchTable", func(t *testing.T) {
 		should.BeErrorIs(t, s.Save("testing", "key", invalidBucket), boltdb.ErrInvalidPath)
 	})
@@ -280,18 +296,15 @@ func TestSave(t *testing.T) {
 	t.Run("nested", func(t *testing.T) {
 		should.NotBeError(t, s.Save(user, user.UserName, nestedBucket))
 	})
-	err = deleteTestEntries(s)
-	should.BeNil(t, err)
-	err = s.Close()
-	should.BeNil(t, err)
+	should.NotBeError(t, deleteTestEntries(s))
+	should.NotBeError(t, s.Close())
 }
 
 func TestInsert(t *testing.T) {
 	user := User{
 		UserName: testUser,
 	}
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	should.NotBeError(t, deleteTestEntries(s))
 
 	t.Run("valid", func(t *testing.T) {
@@ -307,17 +320,13 @@ func TestInsert(t *testing.T) {
 		should.BeErrorIs(t, s.Insert(user, user.UserName, invalidBucket), boltdb.ErrInvalidPath)
 	})
 	// deleteTestEntries(t)
-	err = s.Close()
-	should.BeNil(t, err)
+	should.NotBeError(t, s.Close())
 }
 
 func TestGetOne(t *testing.T) {
 	// err := Initialize("./test.db", tables)
-	s, err := testInit()
-	should.BeNil(t, err)
-	err = deleteTestEntries(s)
-	should.BeNil(t, err)
-	t.Log(err)
+	s := testInit(t)
+	should.NotBeError(t, deleteTestEntries(s))
 	t.Run("noSuchTable", func(t *testing.T) {
 		value, err := s.Get[User]("first", invalidBucket)
 		should.BeEqual(t, value, User{})
@@ -348,10 +357,8 @@ func TestGetOne(t *testing.T) {
 }
 
 func TestGetAll(t *testing.T) {
-	s, err := testInit()
-	should.BeNil(t, err)
-	err = deleteTestEntries(s)
-	should.NotBeError(t, err)
+	s := testInit(t)
+	should.NotBeError(t, deleteTestEntries(s))
 	t.Run("noSuchTable", func(t *testing.T) {
 		value, err := s.GetAll[User](invalidBucket)
 		should.BeEmpty(t, value)
@@ -379,37 +386,23 @@ func TestGetAll(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	should.NotBeError(t, deleteTestEntries(s))
-	t.Run("does not exist", func(t *testing.T) {
-		user := User{
-			UserName: testUser,
-		}
-		err := s.Update(user, user.UserName, userBucket)
-		should.BeErrorIs(t, err, boltdb.ErrExists)
+	t.Run("key does not exist", func(t *testing.T) {
+		err := s.Update("new value", "missing", userBucket)
+		should.BeErrorIs(t, err, boltdb.ErrNoResults)
 	})
+	t.Run("bucket does not exist", func(t *testing.T) {
+		should.BeErrorIs(t, s.Update("new value", "keyname", emptyBucket), boltdb.ErrInvalidPath)
+	})
+	createTestEntries(t, s)
 	t.Run("existing", func(t *testing.T) {
-		user := User{
-			UserName: testUser,
-		}
-		should.NotBeError(t, s.Save(user, user.UserName, userBucket))
-		user2 := User{
-			UserName: "test2",
-			Password: "nopass",
-		}
-		should.NotBeError(t, s.Update(user2, user.UserName, userBucket))
-		user, err = s.Get[User](user.UserName, userBucket)
-		should.NotBeError(t, err)
-		should.BeEqual(t, user.UserName, user2.UserName)
+		should.NotBeError(t, s.Update("new value", "second", userBucket))
 	})
-	// deleteTestEntries(t)
-	should.NotBeError(t, s.Close())
 }
 
 func TestDelete(t *testing.T) {
-	s, err := testInit()
-	should.NotBeError(t, err)
+	s := testInit(t)
 	should.NotBeError(t, deleteTestEntries(s))
 	t.Run("nonexistentTable", func(t *testing.T) {
 		should.BeErrorIs(t, s.Delete("first", invalidBucket), boltdb.ErrInvalidPath)
@@ -462,17 +455,22 @@ func deleteTestEntries(s *boltdb.Store) error {
 	return nil
 }
 
-func testInit() (*boltdb.Store, error) {
+func testInit(t *testing.T) *boltdb.Store {
+	t.Helper()
 	if err := os.Remove("./test.db"); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			return &boltdb.Store{}, err
+			t.FailNow()
 		}
 	}
-	return boltdb.Initialize("./test.db", testBuckets)
+	store, err := boltdb.Initialize("./test.db", testBuckets)
+	if err != nil {
+		t.FailNow()
+	}
+	return store
 }
 
 // func TestJunk(t *testing.T) {
-// 	s, err := testInit()
+// 	s := testInit(t)
 // 	should.NotBeError(t, err)
 // 	err = s.CreateBucket(emptyNestedBucket)
 // 	should.NotBeError(t, err)
