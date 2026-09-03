@@ -17,6 +17,10 @@ func (p Path) last() string {
 	return p[len(p)-1]
 }
 
+func (p Path) parent() Path {
+	return p[:len(p)-1]
+}
+
 func (p path) last() []byte {
 	return p[len(p)-1]
 }

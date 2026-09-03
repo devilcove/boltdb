@@ -36,6 +36,15 @@ func Initialize(file string, buckets []Path) (*Store, error) {
 	return s, s.createBuckets(buckets)
 }
 
+// Open opens a bbolt db file, creating it if it does not exist.
+func Open(file string) (*Store, error) {
+	db, err := bbolt.Open(file, 0o666, &bbolt.Options{Timeout: 1 * time.Second})
+	if err != nil {
+		return &Store{}, err
+	}
+	return &Store{db: db}, nil
+}
+
 // Close closes the database.
 func (s *Store) Close() error {
 	return s.db.Close()
@@ -72,11 +81,11 @@ func (s *Store) CopyKey(sKey, dKey Path) error {
 	dname := []byte(dKey.last())
 	dbucket := toDBPath(dKey)[:len(dKey)-1]
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		value, err := getRaw(tx, name, sKey)
+		value, err := getRaw(tx, name, sKey.parent())
 		if err != nil {
 			return err
 		}
-		k, err := getRaw(tx, name, dKey)
+		k, err := getRaw(tx, name, dKey.parent())
 		if k != nil {
 			return ErrExists
 		}
@@ -139,9 +148,9 @@ func (s *Store) EmptyBucket(path Path) error {
 }
 
 // Get retrieves a value for key in specified bucket.
-func (s *Store) Get[T any](key string, path Path) (T, error) {
+func (s *Store) Get[T any](key string, bucket Path) (T, error) {
 	var value T
-	bytes, err := s.GetRaw([]byte(key), path)
+	bytes, err := s.GetRaw([]byte(key), bucket)
 	if err != nil {
 		return value, err
 	}
@@ -184,22 +193,22 @@ func (s *Store) GetAllRaw(path Path) ([][]byte, error) {
 }
 
 // GetRaw retrieves the value of a key in specified bucket.
-func (s *Store) GetRaw(key []byte, path Path) ([]byte, error) {
+func (s *Store) GetRaw(key []byte, bucket Path) ([]byte, error) {
 	value := []byte{}
 	err := s.db.View(func(tx *bbolt.Tx) error {
 		var err error
-		value, err = getRaw(tx, key, path)
+		value, err = getRaw(tx, key, bucket)
 		return err
 	})
 	return value, err
 }
 
-func getRaw(tx *bbolt.Tx, key []byte, path Path) ([]byte, error) {
+func getRaw(tx *bbolt.Tx, key []byte, parent Path) ([]byte, error) {
 	var (
 		value []byte
 		err   error
 	)
-	bucket := getBucket(tx, path)
+	bucket := getBucket(tx, parent)
 	if bucket == nil {
 		return value, ErrInvalidPath
 	}
@@ -259,7 +268,7 @@ func (s *Store) MoveKey(src, dest Path) error {
 	if err != nil {
 		return err
 	}
-	value, err := getRaw(tx, srcKeyName, src[:len(src)-1])
+	value, err := getRaw(tx, srcKeyName, src.parent())
 	if err != nil {
 		return errors.Join(err, tx.Rollback())
 	}
@@ -301,36 +310,23 @@ func (s *Store) RenameKey(path Path, name string) error {
 }
 
 // Save saves a generic value under key in the specified bucket.
-func (s *Store) Save(value any, key string, path Path) error {
+func (s *Store) Save(value any, key string, parent Path) error {
 	marshalled, err := json.Marshal(&value)
 	if err != nil {
 		return err
 	}
-	return s.SaveRaw(marshalled, []byte(key), path)
+	return s.SaveRaw(marshalled, []byte(key), parent)
 }
 
 // SaveRaw saves a byte value in a bucket.
-func (s *Store) SaveRaw(value, key []byte, path Path) error {
+func (s *Store) SaveRaw(value, key []byte, parent Path) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := getBucket(tx, path)
+		b := getBucket(tx, parent)
 		if b == nil {
 			return ErrInvalidPath
 		}
 		return b.Put(key, value)
 	})
-}
-
-// Tables returns array of table names.
-func (s *Store) Tables() []string {
-	tables := []string{}
-	s.db.View(func(tx *bbolt.Tx) error { //nolint:errcheck,gosec
-		bucket := tx.Inspect()
-		for _, v := range bucket.Children {
-			tables = append(tables, v.Name)
-		}
-		return nil
-	})
-	return tables
 }
 
 // Update save a value only if key already exists.
@@ -405,28 +401,21 @@ func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
 	}
 	dbpath := toDBPath(path)
 	bucket := tx.Bucket(dbpath[0])
-	if bucket != nil {
+	if len(path) == 1 {
 		return bucket
 	}
 	for _, p := range dbpath[1:] {
-		if len(p) == 0 {
+		if len(p) == 0 { // check for path like {"first", "seconde", "", "end"}
 			return nil
 		}
 		bucket = bucket.Bucket(p)
-		if bucket == nil {
-			return bucket
-		}
 	}
 	return bucket
 }
 
 func parentBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
-	b := tx.Bucket([]byte(path[0]))
-	if len(path) == 1 || b == nil {
+	if len(path) < 2 {
 		return nil
 	}
-	for _, p := range path[1 : len(path)-1] {
-		b = b.Bucket([]byte(p))
-	}
-	return b
+	return getBucket(tx, path[:len(path)-1])
 }

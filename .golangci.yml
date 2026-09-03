@@ -47,6 +47,7 @@ linters:
       allow-empty: true
     funcorder:
       alphabetical: true
+      function: true
     ireturn:
       allow:
         - error
@@ -54,6 +55,8 @@ linters:
     mnd:
       ignored-functions:
         - '^bbolt.Open'
+      ignored-numbers:
+        - '2'
     revive:
       enable-default-rules: true
       rules:
