@@ -61,9 +61,10 @@ func (s *Store) CopyBucket(src, dest Path) error {
 		return ErrInvalidPath
 	}
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		origin := tx.Bucket([]byte(src.last()))
+		origin := tx.Bucket([]byte(src.Last()))
 		if len(src) > 1 {
-			origin = parentBucket(tx, src)
+			// origin = parentBucket(tx, src)
+			origin = getBucket(tx, src.Parent())
 		}
 		if origin == nil {
 			return ErrInvalidPath
@@ -77,15 +78,15 @@ func (s *Store) CopyKey(sKey, dKey Path) error {
 	if len(sKey) < 2 || len(dKey) < 2 {
 		return ErrInvalidPath
 	}
-	name := []byte(sKey.last())
-	dname := []byte(dKey.last())
+	name := []byte(sKey.Last())
+	dname := []byte(dKey.Last())
 	dbucket := toDBPath(dKey)[:len(dKey)-1]
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		value, err := getRaw(tx, name, sKey.parent())
+		value, err := getRaw(tx, name, sKey.Parent())
 		if err != nil {
 			return err
 		}
-		k, err := getRaw(tx, name, dKey.parent())
+		k, err := getRaw(tx, name, dKey.Parent())
 		if k != nil {
 			return ErrExists
 		}
@@ -268,11 +269,11 @@ func (s *Store) MoveKey(src, dest Path) error {
 	if err != nil {
 		return err
 	}
-	value, err := getRaw(tx, srcKeyName, src.parent())
+	value, err := getRaw(tx, srcKeyName, src.Parent())
 	if err != nil {
 		return errors.Join(err, tx.Rollback())
 	}
-	parent := parentBucket(tx, dest)
+	parent := getBucket(tx, dest.Parent())
 	if parent == nil {
 		return errors.Join(ErrInvalidPath, tx.Rollback())
 	}
@@ -282,7 +283,7 @@ func (s *Store) MoveKey(src, dest Path) error {
 	if err := parent.Put(destKeyName, value); err != nil {
 		return errors.Join(err, tx.Rollback())
 	}
-	parent = parentBucket(tx, src)
+	parent = getBucket(tx, src.Parent())
 	if err := parent.Delete(srcKeyName); err != nil {
 		return errors.Join(err, tx.Rollback())
 	}
@@ -388,11 +389,11 @@ func deleteBucket(tx *bbolt.Tx, path Path) error {
 	if len(path) == 1 {
 		return tx.DeleteBucket([]byte(path[0]))
 	}
-	parent := parentBucket(tx, path)
+	parent := getBucket(tx, path.Parent())
 	if parent == nil {
 		return ErrInvalidPath
 	}
-	return parent.DeleteBucket([]byte(path.last()))
+	return parent.DeleteBucket([]byte(path.Last()))
 }
 
 func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
@@ -411,11 +412,4 @@ func getBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
 		bucket = bucket.Bucket(p)
 	}
 	return bucket
-}
-
-func parentBucket(tx *bbolt.Tx, path Path) *bbolt.Bucket {
-	if len(path) < 2 {
-		return nil
-	}
-	return getBucket(tx, path[:len(path)-1])
 }

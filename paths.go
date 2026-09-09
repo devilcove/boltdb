@@ -13,11 +13,13 @@ func toDBPath(p Path) path {
 	return bPath
 }
 
-func (p Path) last() string {
+// Last returns the last element of a Path.
+func (p Path) Last() string {
 	return p[len(p)-1]
 }
 
-func (p Path) parent() Path {
+// Parent returns a Path with last element removed.
+func (p Path) Parent() Path {
 	return p[:len(p)-1]
 }
 
